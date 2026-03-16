@@ -1,0 +1,28 @@
+{
+  "name": "02-hono",
+  "version": "1.0.0",
+  "description": "Hono + SAM homework project",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "echo \"No tests yet\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@hono/node-server": "^1.19.11",
+    "dotenv": "^17.3.1",
+    "drizzle-orm": "^0.45.1",
+    "hono": "^4.12.8",
+    "postgres": "^3.4.8"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,291 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Hono Homework - Lambda + API Gateway + VPC + RDS PostgreSQL
+  3 VPC?  + 2 
+
+# ?
+# 
+# ?
+Parameters:
+  DBUsername:
+    Type: String
+    Default: postgres
+    Description: RDS 
+
+  DBPassword:
+    Type: String
+    NoEcho: true        # ?CloudFormation ?
+    Description: RDS 8
+
+  DBName:
+    Type: String
+    Default: hono_hw
+    Description: 
+
+# ?
+#  Lambda 
+# ?
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+    MemorySize: 256
+    Architectures:
+      - x86_64
+
+Resources:
+
+  # 
+  # VPC
+  # 
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: hono-hw-vpc
+
+  # Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: hono-hw-igw
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # 
+  # ?  + 2 3
+  # 
+
+  # 1.  ?NAT Gateway 
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: hono-hw-public
+
+  # 2.  A ?Lambda 
+  LambdaSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: hono-hw-lambda-private
+
+  # 3.  B ?RDS ?
+  DBSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: hono-hw-db-private-a
+
+  # RDS ?2 ?AZ?AZ 
+  DBSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: hono-hw-db-private-b
+
+  # 
+  # NAT Gateway Lambda ?GitHub API?
+  # 
+  NatEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId
+      SubnetId: !Ref PublicSubnet   # NAT 
+      Tags:
+        - Key: Name
+          Value: hono-hw-nat
+
+  # 
+  # 
+  # 
+
+  # ?.0.0.0/0 ?Internet Gateway
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: hono-hw-public-rt
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # ?.0.0.0/0 ?NAT Gatewayambda  GitHub API ?
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: hono-hw-private-rt
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  LambdaSubnetRTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref LambdaSubnet
+      RouteTableId: !Ref PrivateRouteTable
+
+  # 
+  # ?
+  # 
+
+  # Lambda  RDS ?GitHub API?
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Lambda function security group
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: hono-hw-lambda-sg
+
+  # RDS ?Lambda SG ?5432 
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS PostgreSQL security group - only from Lambda
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref LambdaSecurityGroup
+      Tags:
+        - Key: Name
+          Value: hono-hw-db-sg
+
+  # 
+  # RDS PostgreSQL
+  # 
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for hono-hw RDS
+      SubnetIds:
+        - !Ref DBSubnetA
+        - !Ref DBSubnetB
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBInstanceIdentifier: hono-hw-db
+      DBInstanceClass: db.t4g.micro         # ?
+      Engine: postgres
+      EngineVersion: '16.4'
+      DBName: !Ref DBName
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      AllocatedStorage: '20'
+      StorageType: gp2
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      PubliclyAccessible: false             # 
+      MultiAZ: false                        # ?AZ?
+      BackupRetentionPeriod: 0             # 
+
+  # 
+  # Lambda ?Hono ?
+  # 
+  HonoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: hono-hw-api
+      Handler: dist/lambda.handler          # TypeScript  Lambda 
+      CodeUri: ..                           # ?infra/template.yaml ?
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref LambdaSubnet              # Lambda 
+      Environment:
+        Variables:
+          # ?RDS 
+          DATABASE_URL: !Sub
+            - "postgres://${DBUsername}:${DBPassword}@${Endpoint}:5432/${DBName}"
+            - Endpoint: !GetAtt RDSInstance.Endpoint.Address
+      Policies:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole  #  Lambda ?VPC ?ENI
+      Events:
+        RootPath:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: ANY
+        ProxyPath:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+
+Outputs:
+  ApiUrl:
+    Description: "API Gateway URL"
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+
+  RDSEndpoint:
+    Description: "RDS PostgreSQL endpoint"
+    Value: !GetAtt RDSInstance.Endpoint.Address
+
+  LambdaFunctionName:
+    Description: "Lambda function name"
+    Value: !Ref HonoFunction

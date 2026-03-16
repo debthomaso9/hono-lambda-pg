@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub Profile Lookup</title>
+    <style>
+      :root {
+        --bg: #f4f1ea;
+        --card: #fffefb;
+        --text: #1f1f1f;
+        --muted: #5b5b5b;
+        --accent: #0f766e;
+        --accent-2: #115e59;
+        --border: #ddd7cc;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 0% 0%, #e9dfcf 0%, transparent 40%),
+          radial-gradient(circle at 100% 100%, #d4e7e4 0%, transparent 40%),
+          var(--bg);
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      .card {
+        width: min(680px, 100%);
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+      }
+
+      p {
+        margin: 0 0 18px;
+        color: var(--muted);
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+      }
+
+      input {
+        width: 100%;
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        font-size: 14px;
+      }
+
+      .actions {
+        margin-top: 14px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 14px;
+        color: #fff;
+        background: var(--accent);
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: var(--accent-2);
+      }
+
+      .secondary {
+        background: #374151;
+      }
+
+      pre {
+        margin-top: 16px;
+        background: #0d1117;
+        color: #d1d5db;
+        border-radius: 10px;
+        padding: 12px;
+        overflow: auto;
+        min-height: 160px;
+      }
+
+      .tip {
+        margin-top: 10px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>GitHub 信息查询</h1>
+      <p>输入你的 PAT，下一步我们会把它提交到后端，调用 GitHub API 获取个人信息。</p>
+
+      <form id="profile-form">
+        <label for="token">GitHub Personal Access Token</label>
+        <input id="token" name="token" type="password" required placeholder="ghp_xxx..." />
+
+        <div class="actions">
+          <button type="submit">查询个人信息</button>
+          <button type="button" id="btn-save">保存到数据库</button>
+          <button type="button" class="secondary" id="btn-load">查看最近记录</button>
+          <button type="button" class="secondary" id="btn-delete">删除最近保存</button>
+          <button type="button" class="secondary" id="btn-clear">清空输出</button>
+        </div>
+      </form>
+
+      <div class="tip">提示：先查 GitHub 信息，再保存到数据库。删除按钮会删除本页最近一次保存成功的记录。</div>
+      <pre id="output">等待操作...</pre>
+    </main>
+
+    <script>
+      const form = document.getElementById("profile-form");
+      const output = document.getElementById("output");
+      const btnClear = document.getElementById("btn-clear");
+      const btnSave = document.getElementById("btn-save");
+      const btnLoad = document.getElementById("btn-load");
+      const btnDelete = document.getElementById("btn-delete");
+      let latestProfile = null;
+      let latestSavedRecordId = null;
+
+      function show(data) {
+        output.textContent = JSON.stringify(data, null, 2);
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const token = document.getElementById("token").value.trim();
+
+        if (!token) {
+          output.textContent = "请输入 PAT";
+          return;
+        }
+
+        output.textContent = "正在请求 GitHub...";
+
+        try {
+          const res = await fetch("/api/github/profile", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ token })
+          });
+
+          const data = await res.json();
+          latestProfile = data.ok ? data.profile : null;
+          show(data);
+        } catch (err) {
+          output.textContent = `请求失败: ${err?.message ?? "unknown error"}`;
+        }
+      });
+
+      btnSave.addEventListener("click", async () => {
+        if (!latestProfile) {
+          output.textContent = "请先成功查询 GitHub 信息，再执行保存。";
+          return;
+        }
+
+        output.textContent = "正在写入数据库...";
+
+        try {
+          const res = await fetch("/api/records", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              githubId: latestProfile.id,
+              login: latestProfile.login,
+              avatarUrl: latestProfile.avatar_url,
+              name: latestProfile.name,
+              publicRepos: latestProfile.public_repos,
+              followers: latestProfile.followers,
+              following: latestProfile.following
+            })
+          });
+
+          const data = await res.json();
+          latestSavedRecordId = data.ok ? data.record.id : null;
+          show(data);
+        } catch (err) {
+          output.textContent = `保存失败: ${err?.message ?? "unknown error"}`;
+        }
+      });
+
+      btnLoad.addEventListener("click", async () => {
+        output.textContent = "正在读取最近记录...";
+
+        try {
+          const res = await fetch("/api/records");
+          const data = await res.json();
+          show(data);
+        } catch (err) {
+          output.textContent = `读取失败: ${err?.message ?? "unknown error"}`;
+        }
+      });
+
+      btnDelete.addEventListener("click", async () => {
+        if (!latestSavedRecordId) {
+          output.textContent = "当前页面没有可删除的最近保存记录。请先保存一次。";
+          return;
+        }
+
+        output.textContent = "正在删除最近保存记录...";
+
+        try {
+          const res = await fetch(`/api/records/${latestSavedRecordId}`, {
+            method: "DELETE"
+          });
+          const data = await res.json();
+
+          if (data.ok) {
+            latestSavedRecordId = null;
+          }
+
+          show(data);
+        } catch (err) {
+          output.textContent = `删除失败: ${err?.message ?? "unknown error"}`;
+        }
+      });
+
+      btnClear.addEventListener("click", () => {
+        output.textContent = "等待操作...";
+      });
+    </script>
+  </body>
+</html>

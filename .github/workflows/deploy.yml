@@ -1,0 +1,74 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: us-east-1
+  STACK_NAME: hono-hw
+  DB_USERNAME: postgres
+  DB_NAME: hono_hw
+
+jobs:
+  deploy:
+    name: Build and deploy SAM stack
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Setup AWS SAM
+        uses: aws-actions/setup-sam@v2
+
+      - name: Configure AWS credentials from GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-hono-deploy
+
+      - name: Validate SAM template
+        run: sam validate --template infra/template.yaml --region "$AWS_REGION"
+
+      - name: Build SAM application
+        run: sam build --template-file infra/template.yaml
+
+      - name: Deploy SAM stack
+        run: |
+          sam deploy \
+            --template-file .aws-sam/build/template.yaml \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --resolve-s3 \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              "DBUsername=$DB_USERNAME" \
+              "DBPassword=${{ secrets.DB_PASSWORD }}" \
+              "DBName=$DB_NAME"
