@@ -51,6 +51,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: github-actions-hono-deploy
+          role-skip-session-tagging: true
 
       - name: Validate SAM template
         run: sam validate --template infra/template.yaml --region "$AWS_REGION"

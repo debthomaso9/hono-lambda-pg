@@ -6,13 +6,19 @@
       "Principal": {
         "Federated": "arn:aws:iam::928341811997:oidc-provider/token.actions.githubusercontent.com"
       },
-      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Action": [
+        "sts:AssumeRoleWithWebIdentity",
+        "sts:TagSession"
+      ],
       "Condition": {
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:debthomaso9/hono-lambda-pg:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub": [
+            "repo:debthomaso9/hono-lambda-pg:ref:refs/heads/main",
+            "repo:debthomaso9/hono-lambda-pg:environment:production"
+          ]
         }
       }
     }
