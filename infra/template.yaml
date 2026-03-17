@@ -21,7 +21,7 @@ Parameters:
   DBName:
     Type: String
     Default: hono_hw
-    Description: 
+    Description: RDS database name
 
 # ?
 #  Lambda 
