@@ -43,11 +43,13 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Setup AWS SAM
-        uses: aws-actions/setup-sam@v2
+      - name: Install AWS SAM CLI
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install aws-sam-cli
 
       - name: Configure AWS credentials from GitHub OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
